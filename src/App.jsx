@@ -271,12 +271,6 @@ function App() {
   const runAnalysis = async (problemDescription) => {
     const activeKey = provider === 'gemini' ? geminiKey : claudeKey;
     
-    if (!activeKey) {
-      setError(`A valid ${provider === 'gemini' ? 'Google Gemini' : 'Anthropic Claude'} API Key is required to run the analysis.`);
-      setShowKeyInput(true);
-      return;
-    }
-
     setLoading(true);
     setError(null);
     setAnalysisResult(null);
@@ -331,7 +325,42 @@ Only return the raw JSON object. Do not include any introductory or concluding t
     try {
       let rawText = '';
 
-      if (provider === 'gemini') {
+      if (!activeKey) {
+        // Call Vercel serverless function with shared key
+        const payload = {
+          problemDescription,
+          image: selectedImage?.base64Data || null,
+          imageMimeType: selectedImage?.mimeType || null,
+          provider,
+          selectedGeminiModel
+        };
+
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          const errMsg = errData.error?.message || `Server returned status ${response.status}`;
+          
+          if (errMsg.includes('not configured')) {
+            throw new Error(`A valid ${provider === 'gemini' ? 'Google Gemini' : 'Anthropic Claude'} API Key is required to run the analysis. Please click the Settings Gear icon in the top right to configure your own key.`);
+          }
+          throw new Error(errMsg);
+        }
+
+        const data = await response.json();
+        
+        if (provider === 'gemini') {
+          rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        } else {
+          rawText = data.content?.[0]?.text;
+        }
+      } else if (provider === 'gemini') {
         const isGeminiModel = selectedGeminiModel.toLowerCase().includes('gemini');
         
         // Gemma models are text-only; they do not support image processing.
