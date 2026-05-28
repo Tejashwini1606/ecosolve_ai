@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { problemDescription, image, imageMimeType, provider = 'gemini' } = req.body;
+    const { problemDescription, image, imageMimeType, provider = 'gemini', selectedGeminiModel } = req.body;
 
     const systemPrompt = `You are EcoSolve AI, a premium environmental data analyzer. Your job is to analyze the environmental problem, pollutant, or waste type provided by the user (either via text, an image, or both) and return a detailed, structured analysis in JSON format.
 
@@ -58,9 +58,17 @@ Only return the raw JSON object. Do not include any introductory or concluding t
         return res.status(500).json({ error: { message: 'Shared Gemini API Key is not configured on the server.' } });
       }
 
-      // gemini-1.5-flash: 15 RPM free tier (higher than 2.0-flash's 10 RPM)
-      // Fall back to gemini-2.0-flash if 1.5-flash not available on this key
-      const MODELS_TO_TRY = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+      // Prioritize the user's selected model if provided, with default fallbacks
+      const MODELS_TO_TRY = [];
+      if (selectedGeminiModel) {
+        MODELS_TO_TRY.push(selectedGeminiModel);
+      }
+      const defaultModels = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+      for (const m of defaultModels) {
+        if (!MODELS_TO_TRY.includes(m)) {
+          MODELS_TO_TRY.push(m);
+        }
+      }
 
       const parts = [];
       if (image && imageMimeType) {
