@@ -171,11 +171,6 @@ function App() {
     if (savedClaudeKey) {
       setClaudeKey(savedClaudeKey);
     }
-
-    // Prompt key entry if default provider key is missing
-    if (!savedGeminiKey) {
-      setShowKeyInput(true);
-    }
   }, []);
 
   // Fetch available Gemini models for the provided key
@@ -779,10 +774,10 @@ ${analysisResult.recommendations?.map(r => `- ${r}`).join('\n')}
           <div style={{ position: 'relative' }}>
             <button 
               onClick={() => setShowKeyInput(!showKeyInput)}
-              className={`btn-settings ${!getActiveKeyVal() ? 'warning' : ''}`}
-              title={getActiveKeyVal() ? `${provider === 'gemini' ? 'Gemini' : 'Claude'} Connected — Click to Configure API` : 'Set API Key'}
+              className="btn-settings"
+              title={getActiveKeyVal() ? `${provider === 'gemini' ? 'Gemini' : 'Claude'} — Personal Key Active` : 'Settings — Using Shared Key (Optional: Add Your Own)'}
             >
-              <Settings size={20} className={getActiveKeyVal() ? "text-teal" : "text-muted"} />
+              <Settings size={20} className="text-teal" />
             </button>
 
             {showKeyInput && (
@@ -844,12 +839,15 @@ ${analysisResult.recommendations?.map(r => `- ${r}`).join('\n')}
                   </div>
                 )}
 
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                  {provider === 'gemini' 
-                    ? 'Requests connect directly to Google APIs. Free tier keys require no credit balance.'
-                    : 'Requests are proxied locally to prevent CORS blockages. Needs Anthropic key.'
-                  }
-                </p>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(0, 229, 204, 0.05)', border: '1px solid rgba(0, 229, 204, 0.15)' }}>
+                  <span style={{ color: 'var(--accent-teal)', fontWeight: 600 }}>✓ Shared key is active</span> — the site works for everyone without a personal key.<br />
+                  <span style={{ color: 'var(--text-muted)', marginTop: '4px', display: 'inline-block' }}>
+                    {provider === 'gemini' 
+                      ? 'Optionally add your own Google Gemini key below for higher rate limits.'
+                      : 'Optionally add your own Anthropic Claude key below for dedicated access.'
+                    }
+                  </span>
+                </div>
 
                 <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', position: 'relative' }}>
                   <input 
