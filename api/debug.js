@@ -31,6 +31,7 @@ export default async function handler(req, res) {
     // Try a quick test call with the first available model
     const testModel = models[0];
     let testResult = 'not tested';
+    let testError = null;
 
     if (testModel) {
       const testRes = await fetch(
@@ -39,12 +40,19 @@ export default async function handler(req, res) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: 'Say "OK" in one word.' }] }],
+            contents: [{ parts: [{ text: 'Identify this: plastic bottle' }] }],
+            systemInstruction: { parts: [{ text: 'You are an environmental analyzer.' }] },
             generationConfig: { maxOutputTokens: 10 }
           })
         }
       );
-      testResult = testRes.ok ? 'SUCCESS' : `FAILED (${testRes.status})`;
+      if (testRes.ok) {
+        testResult = 'SUCCESS';
+      } else {
+        const errData = await testRes.json().catch(() => ({}));
+        testResult = `FAILED (${testRes.status})`;
+        testError = errData.error?.message || 'Unknown error';
+      }
     }
 
     return res.status(200).json({
@@ -52,7 +60,8 @@ export default async function handler(req, res) {
       keyPrefix: geminiKey.substring(0, 8) + '...',
       availableModels: models,
       bestModel: testModel || 'none found',
-      testCallResult: testResult
+      testCallResult: testResult,
+      testCallError: testError
     });
 
   } catch (err) {
