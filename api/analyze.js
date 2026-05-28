@@ -84,6 +84,7 @@ Only return the raw JSON object. Do not include any introductory or concluding t
 
       let response;
       let lastErrMsg = '';
+      let responseData = null;
 
       for (const MODEL of MODELS_TO_TRY) {
         let modelOk = false;
@@ -97,10 +98,20 @@ Only return the raw JSON object. Do not include any introductory or concluding t
             }
           );
 
-          if (response.ok) { modelOk = true; break; }
+          let data;
+          try {
+            data = await response.json();
+          } catch (e) {
+            data = {};
+          }
 
-          const errData = await response.json().catch(() => ({}));
-          lastErrMsg = errData.error?.message || `Gemini API error ${response.status}`;
+          if (response.ok) {
+            modelOk = true;
+            responseData = data;
+            break;
+          }
+
+          lastErrMsg = data.error?.message || `Gemini API error ${response.status}`;
 
           // Model not found on this key — try next model
           if (response.status === 404 || lastErrMsg.toLowerCase().includes('not found')) {
@@ -118,8 +129,13 @@ Only return the raw JSON object. Do not include any introductory or concluding t
         if (modelOk) break;
       }
 
-      const data = await response.json();
-      return res.status(200).json(data);
+      if (!responseData) {
+        return res.status(response ? response.status : 500).json({
+          error: { message: lastErrMsg || 'Failed to call Gemini API' }
+        });
+      }
+
+      return res.status(200).json(responseData);
 
     } else {
       // Claude Provider
