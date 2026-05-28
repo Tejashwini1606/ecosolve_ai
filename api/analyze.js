@@ -58,8 +58,9 @@ Only return the raw JSON object. Do not include any introductory or concluding t
         return res.status(500).json({ error: { message: 'Shared Gemini API Key is not configured on the server.' } });
       }
 
-      // gemini-2.0-flash confirmed available on this key (verified via /api/debug)
-      const MODEL = 'gemini-2.0-flash';
+      // gemini-1.5-flash: 15 RPM free tier (higher than 2.0-flash's 10 RPM)
+      // Fall back to gemini-2.0-flash if 1.5-flash not available on this key
+      const MODELS_TO_TRY = ['gemini-1.5-flash', 'gemini-2.0-flash'];
 
       const parts = [];
       if (image && imageMimeType) {
@@ -82,28 +83,39 @@ Only return the raw JSON object. Do not include any introductory or concluding t
       };
 
       let response;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
+      let lastErrMsg = '';
+
+      for (const MODEL of MODELS_TO_TRY) {
+        let modelOk = false;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(requestBody)
+            }
+          );
+
+          if (response.ok) { modelOk = true; break; }
+
+          const errData = await response.json().catch(() => ({}));
+          lastErrMsg = errData.error?.message || `Gemini API error ${response.status}`;
+
+          // Model not found on this key — try next model
+          if (response.status === 404 || lastErrMsg.toLowerCase().includes('not found')) {
+            break;
           }
-        );
 
-        if (response.ok) break;
+          // Rate limit — wait and retry once
+          if (response.status === 429 && attempt < 2) {
+            await new Promise(r => setTimeout(r, 3000));
+            continue;
+          }
 
-        const errData = await response.json().catch(() => ({}));
-        const errMsg = errData.error?.message || `Gemini API error ${response.status}`;
-        const isTransient = response.status === 429 || response.status === 503 || response.status === 500;
-
-        if (isTransient && attempt < 3) {
-          await new Promise(r => setTimeout(r, 1500));
-          continue;
+          break;
         }
-
-        return res.status(response.status >= 400 ? response.status : 500).json({ error: { message: errMsg } });
+        if (modelOk) break;
       }
 
       const data = await response.json();
