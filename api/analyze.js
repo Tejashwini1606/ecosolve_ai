@@ -63,7 +63,7 @@ Only return the raw JSON object. Do not include any introductory or concluding t
       if (selectedGeminiModel) {
         MODELS_TO_TRY.push(selectedGeminiModel);
       }
-      const defaultModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+      const defaultModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
       for (const m of defaultModels) {
         if (!MODELS_TO_TRY.includes(m)) {
           MODELS_TO_TRY.push(m);

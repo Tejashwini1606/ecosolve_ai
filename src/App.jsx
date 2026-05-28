@@ -142,8 +142,14 @@ function App() {
   const [claudeKey, setClaudeKey] = useState('');
   
   // Gemini model selection
-  const [geminiModels, setGeminiModels] = useState(['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b']);
-  const [selectedGeminiModel, setSelectedGeminiModel] = useState('gemini-1.5-flash');
+  const [geminiModels, setGeminiModels] = useState([
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-8b',
+    'gemini-1.5-pro'
+  ]);
+  const [selectedGeminiModel, setSelectedGeminiModel] = useState('gemini-2.5-flash');
 
   // Image Upload Settings
   const [selectedImage, setSelectedImage] = useState(null); // { file, previewUrl, base64Data, mimeType }
@@ -187,12 +193,14 @@ function App() {
         if (list.length > 0) {
           setGeminiModels(list);
           // Auto-select best available model
-          if (list.includes('gemini-1.5-flash')) {
+          if (list.includes('gemini-2.5-flash')) {
+            setSelectedGeminiModel('gemini-2.5-flash');
+          } else if (list.includes('gemini-2.0-flash')) {
+            setSelectedGeminiModel('gemini-2.0-flash');
+          } else if (list.includes('gemini-1.5-flash')) {
             setSelectedGeminiModel('gemini-1.5-flash');
           } else if (list.includes('gemini-1.5-flash-8b')) {
             setSelectedGeminiModel('gemini-1.5-flash-8b');
-          } else if (list.includes('gemini-2.5-flash')) {
-            setSelectedGeminiModel('gemini-2.5-flash');
           } else {
             setSelectedGeminiModel(list[0]);
           }
