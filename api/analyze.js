@@ -99,44 +99,66 @@ Only return the raw JSON object. Do not include any introductory or concluding t
         };
       }
 
-      // Call API
-      let activeModel = selectedGeminiModel;
-      let response;
-      let attempts = 0;
-      const maxAttempts = 3;
+      // Auto-try models from newest to oldest — shared key may not have access to all models
+      const MODEL_FALLBACK_LIST = [
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-8b'
+      ];
 
-      while (attempts < maxAttempts) {
-        attempts++;
+      let response;
+      let lastError = null;
+
+      for (const modelToTry of MODEL_FALLBACK_LIST) {
         try {
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${geminiKey}`, {
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${geminiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
           });
 
-          if (response.ok) break;
+          if (response.ok) break; // Found a working model, stop trying
 
           const errData = await response.json().catch(() => ({}));
           const errMsg = errData.error?.message || `Gemini API returned status ${response.status}`;
+
+          // If model not found / not supported, try the next one
+          const isModelError = response.status === 404 ||
+                               errMsg.toLowerCase().includes('not found') ||
+                               errMsg.toLowerCase().includes('not supported') ||
+                               errMsg.toLowerCase().includes('does not exist');
+
+          if (isModelError) {
+            lastError = errMsg;
+            response = null;
+            continue; // try next model
+          }
+
+          // For other errors (rate limit, overload), wait and retry same model
           const isTransientError = response.status === 429 || response.status === 503 || response.status === 500 ||
                                    errMsg.toLowerCase().includes("high demand") ||
-                                   errMsg.toLowerCase().includes("limit") ||
                                    errMsg.toLowerCase().includes("overloaded") ||
                                    errMsg.toLowerCase().includes("temporary");
 
-          if (isTransientError && attempts < maxAttempts) {
-            if (activeModel.includes('2.5') && activeModel !== 'gemini-1.5-flash') {
-              activeModel = 'gemini-1.5-flash';
-            }
+          if (isTransientError) {
             await new Promise(resolve => setTimeout(resolve, 1500));
+            // Try the next model instead of retrying same
+            lastError = errMsg;
+            response = null;
             continue;
-          } else {
-            throw new Error(errMsg);
           }
+
+          throw new Error(errMsg); // Non-recoverable error
         } catch (fetchErr) {
-          if (attempts >= maxAttempts) throw fetchErr;
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          lastError = fetchErr.message;
+          response = null;
+          // Continue to next model
         }
+      }
+
+      if (!response || !response.ok) {
+        throw new Error(lastError || 'All Gemini models failed. Please try again later.');
       }
 
       const data = await response.json();
