@@ -410,60 +410,86 @@ Only return the raw JSON object. Do not include any introductory or concluding t
           };
         }
 
-        // Direct fetch to Gemini API with robust retries and auto-fallback
-        let activeModel = selectedGeminiModel;
-        let response;
-        let attempts = 0;
-        const maxAttempts = 3;
-        
-        while (attempts < maxAttempts) {
-          attempts++;
-          try {
-            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${geminiKey}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(requestBody)
-            });
-            
-            if (response.ok) {
-              break;
-            }
-            
-            const errData = await response.json().catch(() => ({}));
-            const errMsg = errData.error?.message || `Gemini API returned status ${response.status}`;
-            const isTransientError = response.status === 429 || response.status === 503 || response.status === 500 || 
-                                     errMsg.toLowerCase().includes("high demand") || 
-                                     errMsg.toLowerCase().includes("limit") || 
-                                     errMsg.toLowerCase().includes("overloaded") || 
-                                     errMsg.toLowerCase().includes("temporary");
-            
-            if (isTransientError && attempts < maxAttempts) {
-              console.warn(`Transient error on model ${activeModel} (attempt ${attempts}): ${errMsg}. Retrying...`);
-              
-              // If it's a 2.5 model and experiencing high demand, automatically switch to stable 1.5-flash
-              if (activeModel.includes('2.5') && activeModel !== 'gemini-1.5-flash') {
-                console.warn(`Auto-fallback: switching from ${activeModel} to gemini-1.5-flash due to overload.`);
-                activeModel = 'gemini-1.5-flash';
-                setSelectedGeminiModel('gemini-1.5-flash');
-              }
-              
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              continue;
-            } else {
-              throw new Error(errMsg);
-            }
-          } catch (fetchErr) {
-            if (attempts >= maxAttempts) {
-              throw fetchErr;
-            }
-            await new Promise(resolve => setTimeout(resolve, 1500));
+        // Direct fetch to Gemini API with robust retries and auto-fallback loop
+        const MODELS_TO_TRY = [selectedGeminiModel];
+        const defaultModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+        for (const m of defaultModels) {
+          if (!MODELS_TO_TRY.includes(m)) {
+            MODELS_TO_TRY.push(m);
           }
         }
 
-        const data = await response.json();
-        rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        let response;
+        let lastErrMsg = '';
+        let responseData = null;
+        let finalModelUsed = selectedGeminiModel;
+
+        for (const modelOption of MODELS_TO_TRY) {
+          let modelOk = false;
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+              response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelOption}:generateContent?key=${geminiKey}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+              });
+
+              let data;
+              try {
+                data = await response.json();
+              } catch (e) {
+                data = {};
+              }
+
+              if (response.ok) {
+                modelOk = true;
+                responseData = data;
+                finalModelUsed = modelOption;
+                break;
+              }
+
+              lastErrMsg = data.error?.message || `Gemini API returned status ${response.status}`;
+              const isTransientError = response.status === 429 || response.status === 503 || response.status === 500 || 
+                                       lastErrMsg.toLowerCase().includes("high demand") || 
+                                       lastErrMsg.toLowerCase().includes("limit") || 
+                                       lastErrMsg.toLowerCase().includes("overloaded") || 
+                                       lastErrMsg.toLowerCase().includes("temporary");
+
+              // Model not found on this key — try next model immediately
+              if (response.status === 404 || lastErrMsg.toLowerCase().includes('not found')) {
+                break;
+              }
+
+              // Rate limit or transient error — wait and retry once
+              if (isTransientError && attempt < 2) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue;
+              }
+
+              break;
+            } catch (fetchErr) {
+              lastErrMsg = fetchErr.message;
+              if (attempt < 2) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue;
+              }
+              break;
+            }
+          }
+
+          if (modelOk) {
+            setSelectedGeminiModel(finalModelUsed);
+            break;
+          }
+        }
+
+        if (!responseData) {
+          throw new Error(lastErrMsg || 'Failed to call Gemini API after trying multiple models.');
+        }
+
+        rawText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
         
       } else {
         // Claude API request configuration
