@@ -343,7 +343,7 @@ Only return the raw JSON object. Do not include any introductory or concluding t
           const errMsg = errData.error?.message || `Server returned status ${response.status}`;
           
           if (errMsg.includes('not configured')) {
-            throw new Error(`A valid ${provider === 'gemini' ? 'Google Gemini' : 'Anthropic Claude'} API Key is required to run the analysis. Please click the Settings Gear icon in the top right to configure your own key.`);
+            throw new Error(`The shared server key is not set up correctly on Vercel. Please go to Vercel → Project → Settings → Environment Variables and add GEMINI_API_KEY, then redeploy.`);
           }
           throw new Error(errMsg);
         }
